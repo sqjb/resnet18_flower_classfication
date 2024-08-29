@@ -58,7 +58,6 @@ if __name__ == '__main__':
 
     # new fc layer
     model.fc = nn.Linear(model.fc.in_features, 102)
-
     # loss function, optim and sched.
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.fc.parameters(), lr=0.001)
@@ -80,29 +79,35 @@ if __name__ == '__main__':
         print('-' * 20)
 
         # training
-        total_train_cnt = 0
-        total_train_loss = 0.
+        epoch_cnt = 0
+        epoch_loss = 0.
+        epoch_corrects = 0
         model.train()
+        
         for batch, (images, labels) in enumerate(train_dataloader):
             images = images.to(device)
             labels = labels.to(device)
-
+            optimizer.zero_grad()
             # compute prediction error
             pred = model(images)
             _, preds = torch.max(pred, 1)
             loss = loss_fn(pred, labels)
-
+            
             # backpropagation
             loss.backward()
             optimizer.step()
-            optimizer.zero_grad()
+            
 
             # stat
-            loss, current = loss.item(), (batch + 1) * (len(images))
-            total_train_cnt += images.size(0)
-            total_train_loss += loss * images.size(0)
+            batch_avg_loss, current = loss.item(), (batch + 1) * (len(images))
             acc = torch.sum(preds == labels.data) / len(images)
-            print(f"training: loss:{loss:>7f}  acc:{acc:>7f}  [{current:>5d}/{len(train_dataloader.dataset)}]")
+            epoch_corrects += torch.sum(preds == labels.data)
+            epoch_cnt += images.size(0)
+            epoch_loss += batch_avg_loss * images.size(0)
+            print(f"training: loss:{batch_avg_loss:>7f}  acc:{acc:>7f}  [{current:>5d}/{len(train_dataloader.dataset)}]")
+
+        epoch_acc = epoch_corrects / epoch_cnt 
+        print(f"train loss:{epoch_loss/epoch_cnt:.5f} acc:{epoch_acc:.5f}")
 
         # validating
         best_val_acc = 0.
@@ -124,16 +129,11 @@ if __name__ == '__main__':
             total_val_cnt += images.size(0)
             total_val_loss += loss.item() * images.size(0)
             total_accuracy += torch.sum(preds == labels.data)
-            print(f"validating: loss:{loss.item():>7f}  acc:{acc:>7f}  [{current:>5d}/{len(val_dataloader.dataset)}]")
+            #print(f"validating: loss:{loss.item():>7f}  acc:{acc:>7f}  [{current:>5d}/{len(val_dataloader.dataset)}]")
 
-        epoch_avg_train_loss = total_train_loss / total_train_cnt
         epoch_avg_val_loss = total_val_loss / total_val_cnt
         epoch_avg_acc = total_accuracy / total_val_cnt
-        print("avg-train-loss:{:4f}  avg-val-loss:{:.4f}  avg-accuracy:{:.4f}".format(
-            epoch_avg_train_loss,
-            epoch_avg_val_loss,
-            epoch_avg_acc
-        ))
+        print(f"val loss:{epoch_avg_val_loss:.5f} acc:{epoch_avg_acc:.5f}")
 
         # save best model
         if epoch_avg_acc >= best_val_acc:
@@ -144,7 +144,7 @@ if __name__ == '__main__':
     model.load_state_dict(best_weights)
     model.eval()
     corrects = 0.
-    total = 0.
+    total = 0
     for batch, (images, labels) in enumerate(test_dataloader):
         images, labels = images.to(device), labels.to(device)
         preds = model(images)
@@ -153,7 +153,7 @@ if __name__ == '__main__':
         corrects += correct_num
         total += len(images)
         acc = correct_num / len(images)
-        print(f"test-{batch}: acc:{acc:>7f}  [{len(images):>5d}/{len(test_dataloader.dataset)}]")
+        print(f"test-{batch}: acc:{acc:>7f}  [{total:>5d}/{len(test_dataloader.dataset)}]")
 
     test_acc = corrects / total
     print(f"test_total acc:{test_acc:>7f}")
